@@ -169,15 +169,139 @@ class AnomalyTrainer:
         self.config = get_config() if config_path is None else get_config(config_path)
         self.logger = get_app_logger()
         
-        # Setup device
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.logger.info(f"Using device: {self.device}")
+        # Setup device with comprehensive CUDA information
+        self._setup_device()
         
         # Initialize components
         self._setup_data()
         self._setup_model()
         self._setup_training()
         self._setup_monitoring()
+    
+    def _setup_device(self):
+        """Setup device and display comprehensive CUDA information"""
+        self.logger.info("=" * 60)
+        self.logger.info("DEVICE AND CUDA SETUP")
+        self.logger.info("=" * 60)
+        
+        # Check CUDA availability
+        cuda_available = torch.cuda.is_available()
+        self.logger.info(f"CUDA Available: {cuda_available}")
+        
+        if cuda_available:
+            # CUDA device information
+            current_device = torch.cuda.current_device()
+            device_count = torch.cuda.device_count()
+            
+            self.logger.info(f"CUDA Device Count: {device_count}")
+            self.logger.info(f"Current CUDA Device: {current_device}")
+            
+            # Device properties
+            for i in range(device_count):
+                props = torch.cuda.get_device_properties(i)
+                self.logger.info(f"Device {i}: {props.name}")
+                self.logger.info(f"  - Total Memory: {props.total_memory / 1024**3:.2f} GB")
+                self.logger.info(f"  - Multi-processor Count: {props.multi_processor_count}")
+                self.logger.info(f"  - CUDA Capability: {props.major}.{props.minor}")
+            
+            # Memory information
+            allocated = torch.cuda.memory_allocated() / 1024**3
+            reserved = torch.cuda.memory_reserved() / 1024**3
+            self.logger.info(f"CUDA Memory - Allocated: {allocated:.2f} GB, Reserved: {reserved:.2f} GB")
+            
+            # CUDA version information
+            self.logger.info(f"CUDA Version: {torch.version.cuda}")
+            self.logger.info(f"cuDNN Version: {torch.backends.cudnn.version()}")
+            self.logger.info(f"cuDNN Enabled: {torch.backends.cudnn.enabled}")
+            
+            self.device = torch.device(f'cuda:{current_device}')
+            self.logger.info(f"✅ Using GPU: {torch.cuda.get_device_name(current_device)}")
+            
+        else:
+            self.logger.warning("❌ CUDA not available! Training will use CPU")
+            self.logger.info("Reasons CUDA might not be available:")
+            self.logger.info("  - PyTorch not installed with CUDA support")
+            self.logger.info("  - No NVIDIA GPU detected")
+            self.logger.info("  - CUDA drivers not properly installed")
+            self.logger.info("  - CUDA version mismatch")
+            
+            self.device = torch.device('cpu')
+        
+        # PyTorch and system information
+        self.logger.info(f"PyTorch Version: {torch.__version__}")
+        self.logger.info(f"Device Selected: {self.device}")
+        
+        # Performance recommendations
+        if cuda_available:
+            self.logger.info("🚀 GPU Training Recommendations:")
+            self.logger.info("  - Increase batch size if memory allows")
+            self.logger.info("  - Use mixed precision training for speed")
+            self.logger.info("  - Monitor GPU utilization during training")
+        else:
+            self.logger.info("💡 CPU Training Recommendations:")
+            self.logger.info("  - Reduce batch size to prevent memory issues")
+            self.logger.info("  - Consider using smaller model variants")
+            self.logger.info("  - Expect significantly longer training times")
+        
+        self.logger.info("=" * 60)
+    
+    def _monitor_cuda_status(self, epoch: int = None):
+        """Monitor CUDA status and memory usage"""
+        if not torch.cuda.is_available():
+            return
+        
+        try:
+            current_device = torch.cuda.current_device()
+            device_name = torch.cuda.get_device_name(current_device)
+            
+            # Memory statistics
+            allocated = torch.cuda.memory_allocated() / 1024**3
+            reserved = torch.cuda.memory_reserved() / 1024**3
+            max_allocated = torch.cuda.max_memory_allocated() / 1024**3
+            max_reserved = torch.cuda.max_memory_reserved() / 1024**3
+            
+            # GPU utilization (if available)
+            if epoch is not None:
+                prefix = f"[Epoch {epoch}] "
+            else:
+                prefix = ""
+            
+            self.logger.info(f"{prefix}CUDA Status:")
+            self.logger.info(f"  Device: {device_name}")
+            self.logger.info(f"  Memory Allocated: {allocated:.2f} GB")
+            self.logger.info(f"  Memory Reserved: {reserved:.2f} GB")
+            self.logger.info(f"  Max Memory Allocated: {max_allocated:.2f} GB")
+            self.logger.info(f"  Max Memory Reserved: {max_reserved:.2f} GB")
+            
+            # Check for memory issues
+            total_memory = torch.cuda.get_device_properties(current_device).total_memory / 1024**3
+            usage_percent = (allocated / total_memory) * 100
+            
+            if usage_percent > 90:
+                self.logger.warning(f"⚠️  High GPU memory usage: {usage_percent:.1f}%")
+            elif usage_percent > 75:
+                self.logger.info(f"📊 GPU memory usage: {usage_percent:.1f}%")
+            else:
+                self.logger.info(f"✅ GPU memory usage: {usage_percent:.1f}%")
+                
+        except Exception as e:
+            self.logger.warning(f"Failed to get CUDA status: {e}")
+    
+    def _check_cuda_health(self):
+        """Perform a quick CUDA health check"""
+        if not torch.cuda.is_available():
+            return False
+        
+        try:
+            # Test tensor operations
+            test_tensor = torch.randn(100, 100).to(self.device)
+            result = torch.mm(test_tensor, test_tensor.T)
+            del test_tensor, result
+            torch.cuda.empty_cache()
+            return True
+        except Exception as e:
+            self.logger.error(f"CUDA health check failed: {e}")
+            return False
     
     def _setup_data(self):
         """Setup data loaders"""
@@ -473,10 +597,25 @@ class AnomalyTrainer:
         
         self.logger.info(f"Starting training for {num_epochs} epochs...")
         
+        # Initial CUDA health check
+        if torch.cuda.is_available():
+            cuda_healthy = self._check_cuda_health()
+            if not cuda_healthy:
+                self.logger.error("❌ CUDA health check failed! Training may encounter issues.")
+            else:
+                self.logger.info("✅ CUDA health check passed!")
+            
+            # Initial CUDA status
+            self._monitor_cuda_status()
+        
         start_time = time.time()
         
         for epoch in range(num_epochs):
             self.current_epoch = epoch
+            
+            # Periodic CUDA monitoring (every 5 epochs)
+            if torch.cuda.is_available() and (epoch + 1) % 5 == 0:
+                self._monitor_cuda_status(epoch + 1)
             
             # Training phase
             train_metrics = self.train_epoch()
@@ -546,6 +685,16 @@ class AnomalyTrainer:
         self.logger.info(f"Best validation F1: {self.best_f1:.4f}")
         self.logger.info(f"Best validation accuracy: {self.best_accuracy:.4f}")
         
+        # Final CUDA status check
+        if torch.cuda.is_available():
+            self.logger.info("\n" + "=" * 50)
+            self.logger.info("FINAL CUDA STATUS")
+            self.logger.info("=" * 50)
+            self._monitor_cuda_status()
+            
+            # Reset peak memory stats for final reporting
+            torch.cuda.reset_peak_memory_stats()
+        
         # Final plots
         self.plot_training_history()
         
@@ -599,6 +748,26 @@ class AnomalyTrainer:
 
 def main():
     """Main training function"""
+    # Quick CUDA connectivity check before starting
+    print("=" * 60)
+    print("ANOMALY DETECTION TRAINING - CUDA CONNECTIVITY CHECK")
+    print("=" * 60)
+    
+    if torch.cuda.is_available():
+        print(f"✅ CUDA is available!")
+        print(f"🎯 Device count: {torch.cuda.device_count()}")
+        print(f"🔧 Current device: {torch.cuda.current_device()}")
+        print(f"💻 Device name: {torch.cuda.get_device_name()}")
+        print(f"🚀 CUDA version: {torch.version.cuda}")
+        print(f"⚡ Ready for GPU training!")
+    else:
+        print("❌ CUDA is NOT available!")
+        print("💡 Training will proceed on CPU (slower)")
+        print("🔍 Check your PyTorch installation and GPU drivers")
+    
+    print("=" * 60)
+    print()
+    
     trainer = AnomalyTrainer()
     trainer.train()
 
