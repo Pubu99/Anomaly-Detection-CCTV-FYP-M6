@@ -89,20 +89,20 @@ data/raw/
 
 ```bash
 git clone https://github.com/Pubu99/Anomaly-Detection-CCTV-FYP-M6.git
-cd Anomaly-Detection-CCTV-FYP---M6
+cd Anomaly-Detection-CCTV-FYP-M6
 ```
 
 ### 2. Python Environment Setup
 
 ```bash
 # Create virtual environment
-python -m venv anomaly_env
+python -m venv venv
 
 # Activate environment
 # Windows:
-anomaly_env\Scripts\activate
+venv\Scripts\activate
 # Linux/Mac:
-source anomaly_env/bin/activate
+source venv/bin/activate
 
 # Install Python dependencies
 pip install -r requirements.txt
