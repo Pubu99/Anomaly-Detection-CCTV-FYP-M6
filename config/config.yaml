@@ -1,0 +1,218 @@
+# Main Configuration for Multi-Camera Anomaly Detection System
+system:
+  name: "Multi-Camera-Anomaly-Detection"
+  version: "1.0.0"
+  environment: "development" # development, staging, production
+  debug: true
+
+# Dataset Configuration
+dataset:
+  name: "UCF-Crime"
+  classes:
+    - "Abuse"
+    - "Arrest"
+    - "Arson"
+    - "Assault"
+    - "Burglary"
+    - "Explosion"
+    - "Fighting"
+    - "NormalVideos"
+    - "RoadAccidents"
+    - "Robbery"
+    - "Shooting"
+    - "Shoplifting"
+    - "Stealing"
+    - "Vandalism"
+
+  paths:
+    raw_data: "./data/raw"
+    processed_data: "./data/processed"
+    annotations: "./data/annotations"
+
+  image_size: [224, 224] # Upgraded from 64x64 for better accuracy
+  channels: 3
+  batch_size: 32
+  num_workers: 4
+
+# Model Configuration
+model:
+  architecture: "hybrid" # YOLO + Anomaly Classifier
+
+  # YOLO Object Detection
+  yolo:
+    version: "yolov8n" # Start with nano for speed, can upgrade to yolov8s/m/l/x
+    confidence_threshold: 0.25
+    iou_threshold: 0.45
+    max_detections: 300
+    device: "cuda" # cuda, cpu, mps
+
+  # Anomaly Classification Model
+  anomaly_classifier:
+    backbone: "efficientnet_b3" # efficientnet_b0-b7, resnet50, vision_transformer
+    num_classes: 14
+    dropout: 0.3
+    pretrained: true
+
+  # Multi-Camera Fusion
+  fusion:
+    method: "attention" # attention, concatenation, weighted_average
+    scoring_weights: [0.4, 0.35, 0.25] # Camera priority weights
+    temporal_window: 30 # frames for temporal analysis
+    confidence_threshold: 0.75
+
+# Training Configuration
+training:
+  epochs: 100
+  learning_rate: 0.001
+  optimizer: "adamw"
+  scheduler: "cosine"
+  weight_decay: 0.01
+
+  # Loss Configuration
+  loss:
+    type: "focal" # focal, cross_entropy, label_smoothing
+    alpha: 0.25
+    gamma: 2.0
+    label_smoothing: 0.1
+
+  # Data Augmentation
+  augmentation:
+    enabled: true
+    brightness: 0.2
+    contrast: 0.2
+    saturation: 0.2
+    hue: 0.1
+    rotation: 15
+    horizontal_flip: 0.5
+    mixup_alpha: 0.2
+    cutmix_alpha: 1.0
+
+  # Class Balance Handling
+  class_balance:
+    method: "weighted_sampling" # weighted_sampling, focal_loss, oversampling
+    auto_weights: true
+
+  # Validation
+  validation:
+    split: 0.2
+    stratify: true
+    cross_validation_folds: 5
+
+# Inference Configuration
+inference:
+  batch_size: 8
+  max_fps: 30
+  frame_sampling_rate: 3 # Process every 3rd frame for efficiency
+
+  # Real-time Optimization
+  optimization:
+    tensorrt: false # Enable for NVIDIA GPUs
+    onnx: true
+    quantization: false
+    mixed_precision: true
+
+  # Alert System
+  alerts:
+    severity_levels:
+      low: 0.6
+      medium: 0.75
+      high: 0.9
+      critical: 0.95
+
+    emergency_contacts:
+      police: ["Robbery", "Shooting", "Assault", "Fighting"]
+      medical: ["RoadAccidents", "Explosion"]
+      security: ["Burglary", "Vandalism", "Shoplifting", "Stealing"]
+      fire: ["Arson", "Explosion"]
+
+# Multi-Camera Configuration
+cameras:
+  max_cameras: 10
+  sync_tolerance: 0.1 # seconds
+  resolution: [1920, 1080]
+  fps: 30
+
+  # Camera Scoring System
+  scoring:
+    individual_threshold: 0.6
+    combined_threshold: 0.8
+    temporal_consistency: 0.7
+    spatial_correlation: 0.6
+
+# Database Configuration
+database:
+  type: "postgresql" # postgresql, mongodb, sqlite
+  host: "localhost"
+  port: 5432
+  name: "anomaly_detection"
+
+  # Tables/Collections
+  tables:
+    - "cameras"
+    - "detections"
+    - "alerts"
+    - "user_feedback"
+    - "model_versions"
+    - "performance_metrics"
+
+# API Configuration
+api:
+  host: "0.0.0.0"
+  port: 8000
+  workers: 4
+
+  # Security
+  secret_key: "your-secret-key-here"
+  algorithm: "HS256"
+  access_token_expire_minutes: 1440
+
+  # Rate Limiting
+  rate_limit:
+    requests_per_minute: 1000
+    burst_limit: 100
+
+# Real-time Processing
+streaming:
+  protocol: "websocket" # websocket, mqtt, kafka
+  buffer_size: 100
+  compression: "gzip"
+
+  # WebSocket Configuration
+  websocket:
+    max_connections: 1000
+    heartbeat_interval: 30
+
+# Monitoring & Logging
+monitoring:
+  metrics:
+    enabled: true
+    port: 9090
+    path: "/metrics"
+
+  logging:
+    level: "INFO" # DEBUG, INFO, WARNING, ERROR
+    format: "json"
+    file: "./logs/app.log"
+    max_size: "100MB"
+    backup_count: 5
+
+# Continuous Learning
+continuous_learning:
+  enabled: true
+  feedback_threshold: 100 # Retrain after 100 feedback samples
+  retrain_schedule: "weekly" # daily, weekly, monthly
+  validation_metric: "f1_score"
+  improvement_threshold: 0.02 # Minimum improvement to deploy new model
+
+# Hardware Configuration
+hardware:
+  device: "cuda" # cuda, cpu, mps
+  gpu_memory_fraction: 0.8
+  cpu_threads: 8
+  mixed_precision: true
+
+  # Distributed Training
+  distributed:
+    enabled: false
+    backend: "nccl"
+    world_size: 1

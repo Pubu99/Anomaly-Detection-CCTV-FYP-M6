@@ -1,3 +1,53 @@
+#private
+data/raw/
+data/processed/
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# Model files
+*.pth
+*.pt
+*.ckpt
+*.pkl
+*.joblib
+*.h5
+*.hdf5
+*.onnx
+*.trt
+*.engine
+
+# Logs
+logs/
+*.log
+wandb/
+mlruns/
+
+# Environment variables
+.env
+.env.local
+.env.production
+secrets.yaml
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+postgres_data/
+
+# Video files
+*.mp4
+*.avi
+*.mov
+*.wmv
+*.flv
+*.webm
+*.mkv
+
+# Node.js (for frontend)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
