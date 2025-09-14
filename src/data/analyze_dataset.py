@@ -62,29 +62,48 @@ class UCFDatasetAnalyzer:
         distribution = {}
         total_samples = 0
         
-        for class_name in self.classes:
-            class_path = self.data_root / class_name
-            if class_path.exists():
-                image_count = len(list(class_path.glob("*.png")))
-                distribution[class_name] = image_count
-                total_samples += image_count
-            else:
-                distribution[class_name] = 0
-                print(f"⚠️  Warning: {class_name} directory not found")
+        # Check both Train and Test directories
+        for split in ['Train', 'Test']:
+            split_path = self.data_root / split
+            if not split_path.exists():
+                print(f"⚠️  Warning: {split} directory not found at {split_path}")
+                continue
+                
+            distribution[split] = {}
+            split_total = 0
+            
+            for class_name in self.classes:
+                class_path = split_path / class_name
+                if class_path.exists():
+                    image_count = len(list(class_path.glob("*.png")))
+                    distribution[split][class_name] = image_count
+                    split_total += image_count
+                else:
+                    distribution[split][class_name] = 0
+                    print(f"⚠️  Warning: {class_name} directory not found in {split}")
+            
+            distribution[split]['total'] = split_total
+            total_samples += split_total
         
-        # Calculate percentages
+        # Calculate overall percentages
+        overall_distribution = {}
+        for class_name in self.classes:
+            total_class_count = sum(distribution[split].get(class_name, 0) for split in ['Train', 'Test'] if split in distribution)
+            overall_distribution[class_name] = total_class_count
+        
         distribution_pct = {
             class_name: (count / total_samples * 100) if total_samples > 0 else 0
-            for class_name, count in distribution.items()
+            for class_name, count in overall_distribution.items()
         }
         
-        self.class_distribution = distribution
+        self.class_distribution = overall_distribution
         
         return {
-            'absolute_counts': distribution,
+            'split_distribution': distribution,
+            'overall_distribution': overall_distribution,
             'percentages': distribution_pct,
             'total_samples': total_samples,
-            'num_classes': len([c for c in distribution.values() if c > 0])
+            'num_classes': len([c for c in overall_distribution.values() if c > 0])
         }
     
     def _analyze_image_statistics(self) -> Dict:
@@ -101,32 +120,48 @@ class UCFDatasetAnalyzer:
         }
         
         sample_count = 0
-        for class_name in self.classes:
-            class_path = self.data_root / class_name
-            if not class_path.exists():
+        # Sample from both Train and Test directories
+        for split in ['Train', 'Test']:
+            split_path = self.data_root / split
+            if not split_path.exists():
                 continue
                 
-            image_files = list(class_path.glob("*.png"))[:sample_size // len(self.classes)]
-            
-            for img_path in image_files:
-                try:
-                    # Load image
-                    img = cv2.imread(str(img_path))
-                    if img is None:
+            for class_name in self.classes:
+                if sample_count >= sample_size:
+                    break
+                    
+                class_path = split_path / class_name
+                if not class_path.exists():
+                    continue
+                    
+                images_per_class = min(sample_size // (len(self.classes) * 2), 50)  # 2 for Train/Test
+                image_files = list(class_path.glob("*.png"))[:images_per_class]
+                
+                for img_path in image_files:
+                    if sample_count >= sample_size:
+                        break
+                        
+                    try:
+                        # Load image
+                        img = cv2.imread(str(img_path))
+                        if img is None:
+                            image_stats['corrupted_count'] += 1
+                            continue
+                        
+                        h, w, c = img.shape
+                        image_stats['sizes'].append((w, h))
+                        image_stats['aspects'].append(w / h)
+                        image_stats['channels'].append(c)
+                        image_stats['file_sizes'].append(img_path.stat().st_size)
+                        
+                        sample_count += 1
+                        
+                    except Exception as e:
                         image_stats['corrupted_count'] += 1
-                        continue
-                    
-                    h, w, c = img.shape
-                    image_stats['sizes'].append((w, h))
-                    image_stats['aspects'].append(w / h)
-                    image_stats['channels'].append(c)
-                    image_stats['file_sizes'].append(img_path.stat().st_size)
-                    
-                    sample_count += 1
-                    
-                except Exception as e:
-                    image_stats['corrupted_count'] += 1
-                    print(f"Error processing {img_path}: {e}")
+                        print(f"Error processing {img_path}: {e}")
+                        
+            if sample_count >= sample_size:
+                break
         
         # Calculate statistics
         if image_stats['sizes']:
@@ -264,11 +299,16 @@ class UCFDatasetAnalyzer:
         
         # Check naming consistency (simplified check)
         sample_files = []
-        for class_name in self.classes[:3]:  # Sample first 3 classes
-            class_path = self.data_root / class_name
-            if class_path.exists():
-                files = list(class_path.glob("*.png"))[:10]
-                sample_files.extend(files)
+        for split in ['Train', 'Test']:
+            split_path = self.data_root / split
+            if not split_path.exists():
+                continue
+                
+            for class_name in self.classes[:3]:  # Sample first 3 classes
+                class_path = split_path / class_name
+                if class_path.exists():
+                    files = list(class_path.glob("*.png"))[:10]
+                    sample_files.extend(files)
         
         # Basic naming pattern check
         naming_patterns = set()
@@ -381,41 +421,56 @@ class UCFDatasetAnalyzer:
         
         print(f"📊 Visualizations saved to {plots_dir}")
     
-    def create_stratified_splits(self, test_size: float = 0.2, val_size: float = 0.1) -> Dict:
-        """Create stratified train/validation/test splits"""
-        print("🔄 Creating stratified data splits...")
+    def create_stratified_splits(self, val_size: float = 0.15) -> Dict:
+        """Create train/validation/test splits from existing Train/Test directories"""
+        print("🔄 Creating data splits from Train/Test directories...")
         
-        # Collect all image paths and labels
-        image_paths = []
-        labels = []
+        # Load training data (from Train directory)
+        train_paths = []
+        train_labels = []
         
-        for class_idx, class_name in enumerate(self.classes):
-            class_path = self.data_root / class_name
-            if class_path.exists():
-                class_images = list(class_path.glob("*.png"))
-                image_paths.extend(class_images)
-                labels.extend([class_idx] * len(class_images))
+        train_dir = self.data_root / 'Train'
+        if train_dir.exists():
+            for class_idx, class_name in enumerate(self.classes):
+                class_path = train_dir / class_name
+                if class_path.exists():
+                    class_images = list(class_path.glob("*.png"))
+                    train_paths.extend(class_images)
+                    train_labels.extend([class_idx] * len(class_images))
         
-        # Create stratified splits
-        X_train, X_temp, y_train, y_temp = train_test_split(
-            image_paths, labels, test_size=(test_size + val_size), 
-            stratify=labels, random_state=42
-        )
+        # Load test data (from Test directory)
+        test_paths = []
+        test_labels = []
         
-        # Split temp into validation and test
-        X_val, X_test, y_val, y_test = train_test_split(
-            X_temp, y_temp, test_size=(test_size / (test_size + val_size)),
-            stratify=y_temp, random_state=42
-        )
+        test_dir = self.data_root / 'Test'
+        if test_dir.exists():
+            for class_idx, class_name in enumerate(self.classes):
+                class_path = test_dir / class_name
+                if class_path.exists():
+                    class_images = list(class_path.glob("*.png"))
+                    test_paths.extend(class_images)
+                    test_labels.extend([class_idx] * len(class_images))
+        
+        # Split training data into train and validation
+        if train_paths and val_size > 0:
+            X_train, X_val, y_train, y_val = train_test_split(
+                train_paths, train_labels, test_size=val_size, 
+                stratify=train_labels, random_state=42
+            )
+        else:
+            X_train, y_train = train_paths, train_labels
+            X_val, y_val = [], []
         
         splits = {
             'train': {'paths': X_train, 'labels': y_train},
             'val': {'paths': X_val, 'labels': y_val},
-            'test': {'paths': X_test, 'labels': y_test}
+            'test': {'paths': test_paths, 'labels': test_labels}
         }
         
         # Save splits
         splits_path = Path("data/processed/data_splits.json")
+        splits_path.parent.mkdir(parents=True, exist_ok=True)
+        
         splits_serializable = {
             split_name: {
                 'paths': [str(p) for p in split_data['paths']],
@@ -428,7 +483,7 @@ class UCFDatasetAnalyzer:
             json.dump(splits_serializable, f, indent=2)
         
         print(f"✅ Data splits saved to {splits_path}")
-        print(f"Train: {len(X_train)}, Val: {len(X_val)}, Test: {len(X_test)}")
+        print(f"Train: {len(X_train)}, Val: {len(X_val)}, Test: {len(test_paths)}")
         
         return splits
 
