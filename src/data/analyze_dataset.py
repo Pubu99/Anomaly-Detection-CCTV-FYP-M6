@@ -221,7 +221,7 @@ class UCFDatasetAnalyzer:
         for class_name, count in self.class_distribution.items():
             class_labels.extend([class_name] * count)
         
-        unique_classes = list(set(class_labels))
+        unique_classes = np.array(list(set(class_labels)))
         class_weights = compute_class_weight(
             'balanced',
             classes=unique_classes,

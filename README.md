@@ -45,35 +45,8 @@ The system expects data in the following format:
 ```
 data/raw/
 ├── Train/
-│   ├── Abuse/
-│   ├── Arrest/
-│   ├── Arson/
-│   ├── Assault/
-│   ├── Burglary/
-│   ├── Explosion/
-│   ├── Fighting/
-│   ├── NormalVideos/
-│   ├── RoadAccidents/
-│   ├── Robbery/
-│   ├── Shooting/
-│   ├── Shoplifting/
-│   ├── Stealing/
-│   └── Vandalism/
 └── Test/
-    ├── Abuse/
-    ├── Arrest/
-    ├── Arson/
-    ├── Assault/
-    ├── Burglary/
-    ├── Explosion/
-    ├── Fighting/
-    ├── NormalVideos/
-    ├── RoadAccidents/
-    ├── Robbery/
-    ├── Shooting/
-    ├── Shoplifting/
-    ├── Stealing/
-    └── Vandalism/
+   
 ```
 
 ## 🔧 Installation
@@ -124,7 +97,7 @@ cp config/config.yaml.example config/config.yaml
 # Place your dataset in data/raw/ following the structure above
 
 # Analyze and prepare data splits
-python src/data/analyze_dataset.py
+python -m src.data.analyze_dataset
 
 # Expected output:
 # ✅ Dataset analysis complete
@@ -135,7 +108,7 @@ python src/data/analyze_dataset.py
 
 ```bash
 # Train the hybrid model
-python src/training/train.py
+python -m src.training.train
 
 # Training process includes:
 # - Data loading with augmentation
@@ -149,7 +122,7 @@ python src/training/train.py
 
 ```bash
 # Evaluate trained model
-python src/training/train.py --mode evaluate
+python -m src.training.train --mode evaluate
 
 # Outputs:
 # - Classification report
@@ -174,10 +147,10 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
 ```bash
 # For single camera inference
-python src/inference/real_time_inference.py --camera 0
+python -m src.inference.real_time_inference --camera 0
 
 # For multi-camera system
-python src/inference/multi_camera_fusion.py --config config/cameras.yaml
+python -m src.inference.multi_camera_fusion --config config/cameras.yaml
 ```
 
 ### 6. Launch Web Dashboard

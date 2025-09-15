@@ -214,7 +214,7 @@ class AugmentationFactory:
                     val_shift_limit=10,
                     p=0.3
                 ),
-                A.GaussNoise(var_limit=(10.0, 50.0), p=0.2),
+                A.GaussNoise(noise_scale_factor=0.1, p=0.2),
                 A.Blur(blur_limit=3, p=0.1),
                 A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
                 ToTensorV2()

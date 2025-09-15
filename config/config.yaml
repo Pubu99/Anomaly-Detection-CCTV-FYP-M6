@@ -62,7 +62,7 @@ model:
 
 # Training Configuration
 training:
-  epochs: 100
+  epochs: 20
   learning_rate: 0.001
   optimizer: "adamw"
   scheduler: "cosine"

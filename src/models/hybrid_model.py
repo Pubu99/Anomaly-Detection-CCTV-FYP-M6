@@ -9,7 +9,6 @@ for real-time multi-camera surveillance systems.
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.jit import script
 import torchvision.models as models
 from torchvision.models import EfficientNet_B3_Weights, ResNet50_Weights
 import timm
@@ -381,8 +380,11 @@ class MultiCameraFusionModule(nn.Module):
             # Average across cameras
             averaged_features = attended_features.mean(dim=1)  # [B, feature_dim]
         else:
-            averaged_features = torch.zeros(batch_size, self.feature_dim)
-            attention_weights = torch.zeros(batch_size, self.num_cameras, self.feature_dim)
+            # Get device from the first camera encoder parameters
+            device = next(self.camera_encoders[0].parameters()).device
+            dtype = next(self.camera_encoders[0].parameters()).dtype
+            averaged_features = torch.zeros(batch_size, self.feature_dim, device=device, dtype=dtype)
+            attention_weights = torch.zeros(batch_size, self.num_cameras, self.feature_dim, device=device, dtype=dtype)
         
         # Apply temporal consistency if available
         if temporal_features is not None:
@@ -436,9 +438,22 @@ class HybridAnomalyModel(nn.Module):
             dropout=classifier_config['dropout']
         )
         
+        # Calculate the correct feature dimension for multi-camera fusion
+        # The feature_fusion output dimension is feature_dim // 4
+        if classifier_config['backbone'].startswith('efficientnet'):
+            import timm
+            temp_model = timm.create_model(classifier_config['backbone'], pretrained=False, num_classes=0)
+            backbone_feature_dim = temp_model.num_features
+        elif classifier_config['backbone'] == 'resnet50':
+            backbone_feature_dim = 2048  # ResNet50 feature dimension
+        else:
+            backbone_feature_dim = 1536  # Default fallback
+        
+        fusion_feature_dim = backbone_feature_dim // 4  # This matches feature_fusion output
+        
         self.multi_camera_fusion = MultiCameraFusionModule(
             num_cameras=3,  # Default to 3 cameras
-            feature_dim=self.anomaly_classifier.feature_fusion[0].in_features
+            feature_dim=fusion_feature_dim
         )
         
         # Scoring weights from config
@@ -570,6 +585,27 @@ class HybridAnomalyModel(nn.Module):
                 anomaly_results.append(anomaly_result)
             
             return anomaly_results
+    
+    def train(self, mode: bool = True):
+        """
+        Override train method to handle YOLO component properly
+        
+        Args:
+            mode: Whether to set training mode (True) or evaluation mode (False)
+        """
+        # Set PyTorch modules to train/eval mode
+        self.anomaly_classifier.train(mode)
+        self.multi_camera_fusion.train(mode)
+        
+        # For YOLO, we don't call train() as it triggers YOLO's training pipeline
+        # YOLO model is typically kept in eval mode for feature extraction
+        # during our custom training loop
+        
+        return self
+    
+    def eval(self):
+        """Override eval method to handle YOLO component properly"""
+        return self.train(False)
 
 
 def create_model(config: Dict) -> HybridAnomalyModel:
@@ -578,7 +614,6 @@ def create_model(config: Dict) -> HybridAnomalyModel:
 
 
 # Utility functions for model optimization
-@script
 def optimize_inference(model: nn.Module) -> nn.Module:
     """Optimize model for inference using TorchScript"""
     model.eval()

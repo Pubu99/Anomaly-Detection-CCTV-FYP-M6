@@ -109,9 +109,9 @@ class MetricsCalculator:
     
     def update(self, preds: torch.Tensor, targets: torch.Tensor, confidences: torch.Tensor):
         """Update metrics with batch results"""
-        self.predictions.extend(preds.cpu().numpy())
-        self.targets.extend(targets.cpu().numpy())
-        self.confidences.extend(confidences.cpu().numpy())
+        self.predictions.extend(preds.detach().cpu().numpy())
+        self.targets.extend(targets.detach().cpu().numpy())
+        self.confidences.extend(confidences.detach().cpu().numpy())
     
     def compute(self) -> Dict[str, float]:
         """Compute comprehensive metrics"""
@@ -459,22 +459,20 @@ class AnomalyTrainer:
             self.optimizer.zero_grad()
             
             # Forward pass
-            with PerformanceTimer("forward_pass"):
-                results = self.model(images)
-                logits = results['anomaly_logits']
-                confidences = results['final_scores'].squeeze()
+            results = self.model(images)
+            logits = results['anomaly_logits']
+            confidences = results['final_scores'].squeeze()
             
             # Calculate loss
             loss = self.criterion(logits, labels)
             
             # Backward pass
-            with PerformanceTimer("backward_pass"):
-                loss.backward()
-                
-                # Gradient clipping
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
-                
-                self.optimizer.step()
+            loss.backward()
+            
+            # Gradient clipping
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+            
+            self.optimizer.step()
             
             # Update metrics
             predictions = torch.argmax(logits, dim=1)

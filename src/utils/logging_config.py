@@ -123,16 +123,39 @@ class StructuredLogger:
             event_type="health",
             **health_data
         )
+    
+    # Standard logging methods
+    def debug(self, message: str, **kwargs):
+        """Log debug message"""
+        logger.debug(message, **kwargs)
+    
+    def info(self, message: str, **kwargs):
+        """Log info message"""
+        logger.info(message, **kwargs)
+    
+    def warning(self, message: str, **kwargs):
+        """Log warning message"""
+        logger.warning(message, **kwargs)
+    
+    def error(self, message: str, **kwargs):
+        """Log error message"""
+        logger.error(message, **kwargs)
+    
+    def critical(self, message: str, **kwargs):
+        """Log critical message"""
+        logger.critical(message, **kwargs)
 
 
 class PerformanceTimer:
     """Context manager for performance timing"""
     
-    def __init__(self, operation_name: str, logger_instance: StructuredLogger = None):
+    def __init__(self, operation_name: str, logger_instance: StructuredLogger = None, min_duration: float = 1.0, force_log: bool = False):
         self.operation_name = operation_name
         self.logger = logger_instance
         self.start_time = None
         self.end_time = None
+        self.min_duration = min_duration  # Only log if duration exceeds this threshold
+        self.force_log = force_log  # Force logging regardless of duration
     
     def __enter__(self):
         self.start_time = datetime.now()
@@ -142,10 +165,12 @@ class PerformanceTimer:
         self.end_time = datetime.now()
         duration = (self.end_time - self.start_time).total_seconds()
         
-        if self.logger:
-            self.logger.log_performance(self.operation_name, duration)
-        else:
-            logger.info(f"Performance: {self.operation_name} took {duration:.4f}s")
+        # Only log if duration is significant or forced
+        if self.force_log or duration >= self.min_duration:
+            if self.logger:
+                self.logger.log_performance(self.operation_name, duration)
+            else:
+                logger.info(f"Performance: {self.operation_name} took {duration:.4f}s")
 
 
 def setup_logging(config: Dict[str, Any]) -> StructuredLogger:
@@ -158,7 +183,7 @@ def setup_logging(config: Dict[str, Any]) -> StructuredLogger:
     return StructuredLogger(log_level, log_file)
 
 
-def get_logger(name: str = None) -> logger:
+def get_logger(name: str = None):
     """Get logger instance"""
     if name:
         return logger.bind(module=name)
