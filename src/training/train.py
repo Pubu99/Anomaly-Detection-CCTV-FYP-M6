@@ -430,12 +430,33 @@ class AnomalyTrainer:
         
         # Initialize wandb if configured
         if self.config.get('monitoring.use_wandb', False):
+            # Create a more descriptive experiment name
+            experiment_name = f"anomaly_detection_{self.config.get('model.anomaly_classifier.backbone', 'unknown')}_{int(time.time())}"
+            
             wandb.init(
-                project="anomaly-detection",
-                config=self.config.config,
-                name=f"experiment_{int(time.time())}"
+                project="anomaly-detection-cctv",
+                name=experiment_name,
+                config={
+                    "model_architecture": self.config.get('model.architecture'),
+                    "backbone": self.config.get('model.anomaly_classifier.backbone'),
+                    "num_classes": self.config.get('model.anomaly_classifier.num_classes'),
+                    "batch_size": self.config.get('dataset.batch_size'),
+                    "learning_rate": self.config.get('training.learning_rate'),
+                    "epochs": self.config.get('training.epochs'),
+                    "image_size": self.config.get('dataset.image_size'),
+                    "optimizer": self.config.get('training.optimizer'),
+                    "yolo_version": self.config.get('model.yolo.version'),
+                },
+                tags=["multi-camera", "anomaly-detection", "hybrid-model"]
             )
-            wandb.watch(self.model)
+            
+            # Watch model for gradient tracking
+            wandb.watch(self.model, log="all", log_freq=100)
+            
+            self.logger.info(f"✅ Weights & Biases initialized: {experiment_name}")
+            self.logger.info(f"🔗 Dashboard: {wandb.run.url}")
+        else:
+            self.logger.info("ℹ️  Weights & Biases logging disabled")
     
     def train_epoch(self) -> Dict[str, float]:
         """Train for one epoch"""
@@ -479,6 +500,18 @@ class AnomalyTrainer:
             self.train_metrics.update(predictions, labels, confidences)
             
             running_loss += loss.item()
+            
+            # Log to wandb every 100 batches for real-time monitoring
+            if (self.config.get('monitoring.use_wandb', False) and 
+                wandb.run is not None and 
+                batch_idx % 100 == 0):
+                wandb.log({
+                    'batch_loss': loss.item(),
+                    'batch_avg_loss': running_loss / (batch_idx + 1),
+                    'epoch': self.current_epoch + 1,
+                    'batch': batch_idx,
+                    'global_step': self.current_epoch * num_batches + batch_idx
+                })
             
             # Update progress bar
             progress_bar.set_postfix({
@@ -660,8 +693,8 @@ class AnomalyTrainer:
             # Save checkpoint
             self.save_checkpoint(val_metrics, is_best)
             
-            # Log to wandb
-            if hasattr(wandb, 'log'):
+            # Log to wandb if initialized
+            if self.config.get('monitoring.use_wandb', False) and wandb.run is not None:
                 wandb.log({
                     'epoch': epoch + 1,
                     'train_loss': train_metrics['loss'],
@@ -731,6 +764,26 @@ class AnomalyTrainer:
         self.logger.info(f"Accuracy: {final_metrics['accuracy']:.4f}")
         self.logger.info(f"F1 Macro: {final_metrics['f1_macro']:.4f}")
         self.logger.info(f"F1 Weighted: {final_metrics['f1_weighted']:.4f}")
+        
+        # Log final test results to wandb
+        if self.config.get('monitoring.use_wandb', False) and wandb.run is not None:
+            wandb.log({
+                'test_accuracy': final_metrics['accuracy'],
+                'test_f1_macro': final_metrics['f1_macro'],
+                'test_f1_weighted': final_metrics['f1_weighted'],
+                'test_precision_macro': final_metrics.get('precision_macro', 0),
+                'test_recall_macro': final_metrics.get('recall_macro', 0),
+                'final_epoch': 'test_evaluation'
+            })
+            
+            # Log a summary table of all results
+            wandb.summary.update({
+                "best_val_accuracy": self.best_accuracy,
+                "best_val_f1": self.best_f1,
+                "final_test_accuracy": final_metrics['accuracy'],
+                "final_test_f1": final_metrics['f1_macro'],
+                "total_epochs_trained": len(self.training_history)
+            })
         
         # Save test results
         test_results = {
