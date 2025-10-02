@@ -54,6 +54,19 @@ model:
     pretrained: true
     use_enhanced_features: true # Enable enhanced feature extraction
 
+  # Enhanced Temporal Model (from technical report)
+  temporal:
+    architecture: "cnn_lstm" # CNN + LSTM architecture
+    cnn_backbone: "inception_v3" # InceptionV3 for feature extraction
+    feature_dim: 2048 # InceptionV3 output dimension
+    max_seq_length: 32 # Temporal sequence length (from technical report)
+    lstm_hidden_dims: [512, 256] # Multi-layer LSTM
+    num_classes: 14
+    dropout: 0.4
+    use_attention: true # Enable temporal attention
+    freeze_cnn: true # Freeze CNN during training
+    bidirectional_lstm: true # Use bidirectional LSTM
+
   # Multi-Camera Fusion
   fusion:
     method: "attention" # attention, concatenation, weighted_average
@@ -80,7 +93,7 @@ training:
   logit_adjustment:
     enabled: true # Enable for extreme imbalance
     tau: 1.5 # Reduced tau to prevent instability
-  
+
   # Early Stopping
   early_stopping:
     patience: 15 # Increased patience for longer training
@@ -206,7 +219,7 @@ streaming:
 
 # Monitoring & Logging
 monitoring:
-  use_wandb: true  # Set to true to enable Weights & Biases logging
+  use_wandb: true # Set to true to enable Weights & Biases logging
   metrics:
     enabled: true
     port: 9090

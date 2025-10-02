@@ -9,7 +9,32 @@
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Status](https://img.shields.io/badge/status-production--ready-brightgreen.svg)
 
-**Professional-grade AI system for real-time anomaly detection in multi-camera surveillance environments**
+# Enhanced Anomaly Detection CCTV System - Technical Report Implementation
+
+A professional multi-camera anomaly detection system implementing advanced CNN-LSTM architecture with OpenVINO optimization for real-time surveillance. This system incorporates proven techniques from academic research with modern deep learning enhancements for superior performance on unseen data.
+
+## 🚀 New Features & Enhancements
+
+### ✅ Technical Report Implementation
+
+- **CNN-LSTM Architecture**: InceptionV3 feature extraction + Multi-layer LSTM
+- **Temporal Processing**: 32-frame sequences with attention mechanisms
+- **Advanced Training**: Two-stage training with feature pre-computation
+- **Real-time Optimization**: OpenVINO integration for faster inference
+
+### ✅ Enhanced Model Performance
+
+- **Target Accuracy**: 90-95% on test data with superior generalization
+- **Class Imbalance Handling**: Advanced loss functions for extreme imbalance
+- **Temporal Understanding**: Attention-based sequence modeling
+- **Multi-scale Learning**: Auxiliary classifiers for better convergence
+
+### ✅ Production-Ready Features
+
+- **Multi-threaded Inference**: Parallel video processing pipeline
+- **Model Optimization**: ONNX, OpenVINO, and TensorRT support
+- **Feature Caching**: 3-5x faster training with pre-computed features
+- **Comprehensive Evaluation**: Advanced metrics and performance monitoring
 
 [🚀 Quick Start](#quick-start) • [📖 Installation](#installation) • [🎯 Features](#features) • [🔧 Usage](#usage) • [📊 Dataset](#dataset)
 
@@ -46,7 +71,7 @@ The system expects data in the following format:
 data/raw/
 ├── Train/
 └── Test/
-   
+
 ```
 
 ## 🔧 Installation
