@@ -181,7 +181,7 @@ class ObjectDetector(nn.Module):
 
 
 class AnomalyClassifier(nn.Module):
-    """Advanced anomaly classifier with attention mechanism"""
+    """Advanced anomaly classifier with multiple enhancements for extreme imbalance"""
     
     def __init__(
         self,
@@ -219,79 +219,157 @@ class AnomalyClassifier(nn.Module):
         else:
             raise ValueError(f"Unsupported backbone: {backbone}")
         
-        # Global Average Pooling
-        self.global_pool = nn.AdaptiveAvgPool2d(1)
+        # Global Average and Max Pooling (for richer features)
+        self.global_avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.global_max_pool = nn.AdaptiveMaxPool2d(1)
         
-        # Attention mechanism
-        self.attention = SpatialAttention(feature_dim)
+        # Multi-scale attention mechanism
+        self.spatial_attention = SpatialAttention(feature_dim)
+        self.channel_attention = ChannelAttention(feature_dim)
         
-        # Feature fusion
+        # Feature fusion (combine avg and max pooling)
+        combined_dim = feature_dim * 2
         self.feature_fusion = nn.Sequential(
+            nn.Linear(combined_dim, feature_dim),
+            nn.BatchNorm1d(feature_dim),
+            nn.ReLU(inplace=True),
+            nn.Dropout(dropout),
             nn.Linear(feature_dim, feature_dim // 2),
+            nn.BatchNorm1d(feature_dim // 2),
             nn.ReLU(inplace=True),
             nn.Dropout(dropout),
             nn.Linear(feature_dim // 2, feature_dim // 4),
+            nn.BatchNorm1d(feature_dim // 4),
             nn.ReLU(inplace=True),
             nn.Dropout(dropout)
         )
         
-        # Classification head
-        self.classifier = nn.Sequential(
-            nn.Linear(feature_dim // 4, num_classes),
-        )
+        # Multi-head classification (helps with extreme imbalance)
+        self.normal_head = nn.Linear(feature_dim // 4, 2)  # Normal vs Anomaly
+        self.anomaly_head = nn.Linear(feature_dim // 4, num_classes - 1)  # Specific anomaly types
+        self.combined_head = nn.Linear(feature_dim // 4, num_classes)  # Full classification
         
         # Confidence estimation head
         self.confidence_head = nn.Sequential(
-            nn.Linear(feature_dim // 4, 1),
+            nn.Linear(feature_dim // 4, feature_dim // 8),
+            nn.ReLU(inplace=True),
+            nn.Linear(feature_dim // 8, 1),
             nn.Sigmoid()
         )
         
-    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        # Feature projection for contrastive learning
+        self.projection_head = nn.Sequential(
+            nn.Linear(feature_dim // 4, feature_dim // 8),
+            nn.ReLU(inplace=True),
+            nn.Linear(feature_dim // 8, feature_dim // 16)
+        )
+        
+    def forward(self, x: torch.Tensor, return_features: bool = False) -> Dict[str, torch.Tensor]:
         """
         Forward pass
         
         Args:
             x: Input images [B, C, H, W]
+            return_features: Whether to return intermediate features
             
         Returns:
-            logits: Class logits [B, num_classes]
-            confidence: Confidence scores [B, 1]
+            Dictionary containing various outputs
         """
         # Extract features
         features = self.backbone(x)
         
-        # Apply spatial attention
-        attended_features = self.attention(features)
+        # Apply attention mechanisms
+        features = self.spatial_attention(features)
+        features = self.channel_attention(features)
         
-        # Global pooling
-        pooled_features = self.global_pool(attended_features)
-        pooled_features = pooled_features.view(pooled_features.size(0), -1)
+        # Global pooling (combine avg and max)
+        avg_pooled = self.global_avg_pool(features)
+        max_pooled = self.global_max_pool(features)
+        
+        # Flatten and combine
+        avg_pooled = avg_pooled.view(avg_pooled.size(0), -1)
+        max_pooled = max_pooled.view(max_pooled.size(0), -1)
+        combined_features = torch.cat([avg_pooled, max_pooled], dim=1)
         
         # Feature fusion
-        fused_features = self.feature_fusion(pooled_features)
+        fused_features = self.feature_fusion(combined_features)
         
-        # Classification
-        logits = self.classifier(fused_features)
+        # Multiple classification heads
+        normal_logits = self.normal_head(fused_features)
+        anomaly_logits = self.anomaly_head(fused_features)
+        combined_logits = self.combined_head(fused_features)
+        
+        # Confidence and projection
         confidence = self.confidence_head(fused_features)
+        projected_features = self.projection_head(fused_features)
         
-        return logits, confidence
+        outputs = {
+            'combined_logits': combined_logits,
+            'normal_logits': normal_logits,
+            'anomaly_logits': anomaly_logits,
+            'confidence': confidence,
+            'projected_features': projected_features,
+            'fused_features': fused_features
+        }
+        
+        if return_features:
+            outputs['raw_features'] = features
+            
+        return outputs
+
+
+class ChannelAttention(nn.Module):
+    """Channel attention mechanism"""
+    
+    def __init__(self, in_channels: int, reduction: int = 16):
+        super().__init__()
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.max_pool = nn.AdaptiveMaxPool2d(1)
+        
+        self.fc = nn.Sequential(
+            nn.Linear(in_channels, in_channels // reduction),
+            nn.ReLU(inplace=True),
+            nn.Linear(in_channels // reduction, in_channels)
+        )
+        self.sigmoid = nn.Sigmoid()
+    
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply channel attention"""
+        b, c, h, w = x.size()
+        
+        # Average and max pooling
+        avg_pool = self.avg_pool(x).view(b, c)
+        max_pool = self.max_pool(x).view(b, c)
+        
+        # Compute attention weights
+        avg_out = self.fc(avg_pool)
+        max_out = self.fc(max_pool)
+        
+        attention = self.sigmoid(avg_out + max_out).view(b, c, 1, 1)
+        
+        return x * attention
 
 
 class SpatialAttention(nn.Module):
-    """Spatial attention mechanism for focusing on important regions"""
+    """Enhanced spatial attention mechanism"""
     
     def __init__(self, in_channels: int):
         super().__init__()
         self.conv1 = nn.Conv2d(in_channels, in_channels // 8, 1)
-        self.conv2 = nn.Conv2d(in_channels // 8, 1, 1)
+        self.conv2 = nn.Conv2d(in_channels // 8, in_channels // 16, 3, padding=1)
+        self.conv3 = nn.Conv2d(in_channels // 16, 1, 1)
         self.sigmoid = nn.Sigmoid()
+        self.batch_norm = nn.BatchNorm2d(in_channels // 8)
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Apply spatial attention"""
         # Generate attention map
         attention = self.conv1(x)
+        attention = self.batch_norm(attention)
         attention = F.relu(attention, inplace=True)
         attention = self.conv2(attention)
+        attention = F.relu(attention, inplace=True)
+        attention = self.conv3(attention)
         attention = self.sigmoid(attention)
         
         # Apply attention
@@ -465,7 +543,7 @@ class HybridAnomalyModel(nn.Module):
         
     def forward(
         self, 
-        images: torch.Tensor,
+        images: torch.Tensor, 
         camera_ids: Optional[List[str]] = None,
         return_objects: bool = False
     ) -> Dict[str, torch.Tensor]:
@@ -493,32 +571,36 @@ class HybridAnomalyModel(nn.Module):
             object_detections = None
             danger_scores = None
         
-        # Anomaly classification
-        anomaly_logits, anomaly_confidence = self.anomaly_classifier(images)
-        anomaly_probs = F.softmax(anomaly_logits, dim=1)
+        # Anomaly classification with enhanced outputs
+        classifier_outputs = self.anomaly_classifier(images, return_features=True)
         
-        # Extract features for fusion (from classifier's feature fusion layer)
-        with torch.no_grad():
-            features = self.anomaly_classifier.backbone(images)
-            attended_features = self.anomaly_classifier.attention(features)
-            pooled_features = self.anomaly_classifier.global_pool(attended_features)
-            pooled_features = pooled_features.view(batch_size, -1)
-            fusion_features = self.anomaly_classifier.feature_fusion(pooled_features)
+        anomaly_logits = classifier_outputs['combined_logits']
+        normal_logits = classifier_outputs['normal_logits']
+        anomaly_confidence = classifier_outputs['confidence']
+        fusion_features = classifier_outputs['fused_features']
+        projected_features = classifier_outputs['projected_features']
+        
+        anomaly_probs = F.softmax(anomaly_logits, dim=1)
         
         # Multi-camera fusion (simulated for single camera, can be extended)
         camera_features = [fusion_features]  # Single camera for now
         fused_score, camera_attention = self.multi_camera_fusion(camera_features)
         
-        # Combine scores
-        final_scores = anomaly_confidence * 0.7 + fused_score * 0.3
+        # Combine scores with better weighting
+        final_scores = (anomaly_confidence * 0.6 + 
+                       fused_score * 0.3 + 
+                       torch.sigmoid(normal_logits[:, 1:2]) * 0.1)  # Anomaly vs normal score
         
         results = {
             'anomaly_logits': anomaly_logits,
+            'normal_logits': normal_logits,
             'anomaly_probs': anomaly_probs,
             'anomaly_confidence': anomaly_confidence,
             'fused_score': fused_score,
             'final_scores': final_scores,
-            'camera_attention': camera_attention
+            'camera_attention': camera_attention,
+            'projected_features': projected_features,
+            'fusion_features': fusion_features
         }
         
         if return_objects:
@@ -622,7 +704,7 @@ def optimize_inference(model: nn.Module) -> nn.Module:
 
 def load_pretrained_weights(model: HybridAnomalyModel, weights_path: str):
     """Load pretrained weights"""
-    checkpoint = torch.load(weights_path, map_location='cpu')
+    checkpoint = torch.load(weights_path, map_location='cpu', weights_only=False)
     if 'state_dict' in checkpoint:
         model.load_state_dict(checkpoint['state_dict'])
     else:

@@ -10,7 +10,7 @@ import os
 import yaml
 from pathlib import Path
 from typing import Dict, Any, Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from loguru import logger
 
 
@@ -56,6 +56,14 @@ class TrainingConfig:
     augmentation: Dict[str, Any]
     class_balance: Dict[str, Any]
     validation: Dict[str, Any]
+    early_stopping: Dict[str, Any]
+    # Optional knobs
+    use_mixup: bool = True
+    use_cutmix: bool = True
+    warmup_epochs: int = 0
+    ema_decay: float = 0.0
+    progressive_resizing: Dict[str, Any] = field(default_factory=dict)
+    logit_adjustment: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass

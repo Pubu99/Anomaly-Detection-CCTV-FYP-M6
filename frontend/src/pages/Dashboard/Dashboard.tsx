@@ -8,7 +8,6 @@
 import React, { useEffect, useState } from "react";
 import {
   Box,
-  Grid,
   Card,
   CardContent,
   Typography,
@@ -124,11 +123,11 @@ const StatCard: React.FC<StatCardProps> = ({
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
+              color: theme.palette[color].main,
+              fontSize: 32,
             }}
           >
-            {React.cloneElement(icon as React.ReactElement, {
-              sx: { fontSize: 32, color: theme.palette[color].main },
-            })}
+            {icon}
           </Box>
         </Box>
       </CardContent>
@@ -167,7 +166,11 @@ const Dashboard: React.FC = () => {
       camera_id: `CAM-${String(i + 1).padStart(3, "0")}`,
       name: `Camera ${i + 1}`,
       location: `Location ${i + 1}`,
-      status: Math.random() > 0.2 ? "active" : "inactive",
+      status: (Math.random() > 0.2 ? "active" : "inactive") as
+        | "active"
+        | "inactive"
+        | "error"
+        | "maintenance",
       position_x: Math.random() * 100,
       position_y: Math.random() * 100,
       weight: Math.random(),
@@ -195,10 +198,10 @@ const Dashboard: React.FC = () => {
       confidence: 0.7 + Math.random() * 0.3,
       severity: ["low", "medium", "high", "critical"][
         Math.floor(Math.random() * 4)
-      ],
+      ] as "low" | "medium" | "high" | "critical",
       status: ["active", "acknowledged", "resolved"][
         Math.floor(Math.random() * 3)
-      ],
+      ] as "active" | "acknowledged" | "resolved" | "false_positive",
       emergency_contact_sent: Math.random() > 0.5,
       created_at: new Date(Date.now() - Math.random() * 86400000).toISOString(),
     }));
@@ -302,48 +305,57 @@ const Dashboard: React.FC = () => {
       {(loading || refreshing) && <LinearProgress sx={{ mb: 3 }} />}
 
       {/* Stats Cards */}
-      <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} sm={6} md={3}>
-          <StatCard
-            title="Total Cameras"
-            value={stats?.total_cameras || 0}
-            icon={<Videocam />}
-            color="primary"
-            trend={{ value: 8.2, isPositive: true }}
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <StatCard
-            title="Active Cameras"
-            value={stats?.active_cameras || 0}
-            icon={<CheckCircle />}
-            color="success"
-            trend={{ value: 2.1, isPositive: true }}
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <StatCard
-            title="Alerts (24h)"
-            value={stats?.total_alerts_24h || 0}
-            icon={<Warning />}
-            color="warning"
-            trend={{ value: -12.3, isPositive: false }}
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <StatCard
-            title="Model Accuracy"
-            value={`${stats?.model_accuracy?.toFixed(1) || 0}%`}
-            icon={<Timeline />}
-            color="info"
-            trend={{ value: 1.4, isPositive: true }}
-          />
-        </Grid>
-      </Grid>
+      <Box
+        sx={{
+          display: "grid",
+          gridTemplateColumns: {
+            xs: "1fr",
+            sm: "repeat(2, 1fr)",
+            md: "repeat(4, 1fr)",
+          },
+          gap: 3,
+          mb: 3,
+        }}
+      >
+        <StatCard
+          title="Total Cameras"
+          value={stats?.total_cameras || 0}
+          icon={<Videocam />}
+          color="primary"
+          trend={{ value: 8.2, isPositive: true }}
+        />
+        <StatCard
+          title="Active Cameras"
+          value={stats?.active_cameras || 0}
+          icon={<CheckCircle />}
+          color="success"
+          trend={{ value: 2.1, isPositive: true }}
+        />
+        <StatCard
+          title="Alerts (24h)"
+          value={stats?.total_alerts_24h || 0}
+          icon={<Warning />}
+          color="warning"
+          trend={{ value: -12.3, isPositive: false }}
+        />
+        <StatCard
+          title="Model Accuracy"
+          value={`${stats?.model_accuracy?.toFixed(1) || 0}%`}
+          icon={<Timeline />}
+          color="info"
+          trend={{ value: 1.4, isPositive: true }}
+        />
+      </Box>
 
-      <Grid container spacing={3}>
+      <Box
+        sx={{
+          display: "grid",
+          gridTemplateColumns: { xs: "1fr", lg: "2fr 1fr" },
+          gap: 3,
+        }}
+      >
         {/* System Performance */}
-        <Grid item xs={12} lg={8}>
+        <Box>
           <Card>
             <CardContent>
               <Box
@@ -365,33 +377,37 @@ const Dashboard: React.FC = () => {
                 />
               </Box>
 
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
-                  <Box sx={{ mb: 2 }}>
-                    <Box
-                      sx={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        mb: 1,
-                      }}
-                    >
-                      <Typography variant="body2" color="textSecondary">
-                        System Uptime
-                      </Typography>
-                      <Typography variant="body2" sx={{ fontWeight: "bold" }}>
-                        {stats?.system_uptime?.toFixed(1) || 0}%
-                      </Typography>
-                    </Box>
-                    <LinearProgress
-                      variant="determinate"
-                      value={stats?.system_uptime || 0}
-                      color="success"
-                      sx={{ height: 8, borderRadius: 4 }}
-                    />
+              <Box
+                sx={{
+                  display: "grid",
+                  gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)" },
+                  gap: 2,
+                }}
+              >
+                <Box sx={{ mb: 2 }}>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      mb: 1,
+                    }}
+                  >
+                    <Typography variant="body2" color="textSecondary">
+                      System Uptime
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: "bold" }}>
+                      {stats?.system_uptime?.toFixed(1) || 0}%
+                    </Typography>
                   </Box>
-                </Grid>
+                  <LinearProgress
+                    variant="determinate"
+                    value={stats?.system_uptime || 0}
+                    color="success"
+                    sx={{ height: 8, borderRadius: 4 }}
+                  />
+                </Box>
 
-                <Grid item xs={12} sm={6}>
+                <Box>
                   <Box sx={{ mb: 2 }}>
                     <Box
                       sx={{
@@ -414,151 +430,141 @@ const Dashboard: React.FC = () => {
                       sx={{ height: 8, borderRadius: 4 }}
                     />
                   </Box>
-                </Grid>
+                </Box>
 
-                <Grid item xs={12} sm={6}>
-                  <Box sx={{ mb: 2 }}>
-                    <Box
-                      sx={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        mb: 1,
-                      }}
-                    >
-                      <Typography variant="body2" color="textSecondary">
-                        False Positive Rate
-                      </Typography>
-                      <Typography variant="body2" sx={{ fontWeight: "bold" }}>
-                        {stats?.false_positive_rate?.toFixed(1) || 0}%
-                      </Typography>
-                    </Box>
-                    <LinearProgress
-                      variant="determinate"
-                      value={stats?.false_positive_rate || 0}
-                      color="warning"
-                      sx={{ height: 8, borderRadius: 4 }}
-                    />
-                  </Box>
-                </Grid>
-
-                <Grid item xs={12} sm={6}>
-                  <Box sx={{ mb: 2 }}>
-                    <Box
-                      sx={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        mb: 1,
-                      }}
-                    >
-                      <Typography variant="body2" color="textSecondary">
-                        Model Accuracy
-                      </Typography>
-                      <Typography variant="body2" sx={{ fontWeight: "bold" }}>
-                        {stats?.model_accuracy?.toFixed(1) || 0}%
-                      </Typography>
-                    </Box>
-                    <LinearProgress
-                      variant="determinate"
-                      value={stats?.model_accuracy || 0}
-                      color="primary"
-                      sx={{ height: 8, borderRadius: 4 }}
-                    />
-                  </Box>
-                </Grid>
-              </Grid>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        {/* Recent Alerts */}
-        <Grid item xs={12} lg={4}>
-          <Card sx={{ height: "100%" }}>
-            <CardContent>
-              <Typography variant="h6" component="h2" sx={{ mb: 2 }}>
-                Recent Alerts
-              </Typography>
-
-              <Stack spacing={2}>
-                {recentAlerts.map((alert) => (
-                  <Paper
-                    key={alert.id}
+                <Box sx={{ mb: 2 }}>
+                  <Box
                     sx={{
-                      p: 2,
-                      border: `1px solid ${theme.palette.divider}`,
-                      borderLeft: `4px solid ${
-                        theme.palette[
-                          getSeverityColor(
-                            alert.severity
-                          ) as keyof typeof theme.palette
-                        ].main
-                      }`,
+                      display: "flex",
+                      justifyContent: "space-between",
+                      mb: 1,
                     }}
                   >
-                    <Box
-                      sx={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "flex-start",
-                        mb: 1,
-                      }}
-                    >
-                      <Typography
-                        variant="subtitle2"
-                        sx={{ fontWeight: "bold" }}
-                      >
-                        {alert.anomaly_class.replace("_", " ").toUpperCase()}
-                      </Typography>
-                      <Chip
-                        label={alert.severity}
-                        size="small"
-                        color={getSeverityColor(alert.severity) as any}
-                        variant="outlined"
-                      />
-                    </Box>
-
-                    <Typography
-                      variant="body2"
-                      color="textSecondary"
-                      sx={{ mb: 1 }}
-                    >
-                      Camera: {alert.camera_id}
+                    <Typography variant="body2" color="textSecondary">
+                      False Positive Rate
                     </Typography>
-
-                    <Box
-                      sx={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                      }}
-                    >
-                      <Typography variant="caption" color="textSecondary">
-                        {format(new Date(alert.created_at), "MMM dd, HH:mm")}
-                      </Typography>
-                      <Chip
-                        label={alert.status}
-                        size="small"
-                        color={getStatusColor(alert.status) as any}
-                        variant="filled"
-                      />
-                    </Box>
-                  </Paper>
-                ))}
-
-                {recentAlerts.length === 0 && (
-                  <Box sx={{ textAlign: "center", py: 4 }}>
-                    <Security
-                      sx={{ fontSize: 48, color: "text.secondary", mb: 2 }}
-                    />
-                    <Typography color="textSecondary">
-                      No recent alerts
+                    <Typography variant="body2" sx={{ fontWeight: "bold" }}>
+                      {stats?.false_positive_rate?.toFixed(1) || 0}%
                     </Typography>
                   </Box>
-                )}
-              </Stack>
+                  <LinearProgress
+                    variant="determinate"
+                    value={stats?.false_positive_rate || 0}
+                    color="warning"
+                    sx={{ height: 8, borderRadius: 4 }}
+                  />
+                </Box>
+
+                <Box sx={{ mb: 2 }}>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      mb: 1,
+                    }}
+                  >
+                    <Typography variant="body2" color="textSecondary">
+                      Model Accuracy
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: "bold" }}>
+                      {stats?.model_accuracy?.toFixed(1) || 0}%
+                    </Typography>
+                  </Box>
+                  <LinearProgress
+                    variant="determinate"
+                    value={stats?.model_accuracy || 0}
+                    color="primary"
+                    sx={{ height: 8, borderRadius: 4 }}
+                  />
+                </Box>
+              </Box>
             </CardContent>
           </Card>
-        </Grid>
-      </Grid>
+        </Box>
+
+        {/* Recent Alerts */}
+        <Card sx={{ height: "100%" }}>
+          <CardContent>
+            <Typography variant="h6" component="h2" sx={{ mb: 2 }}>
+              Recent Alerts
+            </Typography>
+
+            <Stack spacing={2}>
+              {recentAlerts.map((alert) => (
+                <Paper
+                  key={alert.id}
+                  sx={{
+                    p: 2,
+                    border: `1px solid ${theme.palette.divider}`,
+                    borderLeft: `4px solid ${
+                      (theme.palette as any)[getSeverityColor(alert.severity)]
+                        ?.main || theme.palette.grey[500]
+                    }`,
+                  }}
+                >
+                  <Box
+                    sx={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "flex-start",
+                      mb: 1,
+                    }}
+                  >
+                    <Typography variant="subtitle2" sx={{ fontWeight: "bold" }}>
+                      {alert.anomaly_class.replace("_", " ").toUpperCase()}
+                    </Typography>
+                    <Chip
+                      label={alert.severity}
+                      size="small"
+                      color={getSeverityColor(alert.severity) as any}
+                      variant="outlined"
+                    />
+                  </Box>
+
+                  <Typography
+                    variant="body2"
+                    color="textSecondary"
+                    sx={{ mb: 1 }}
+                  >
+                    Camera: {alert.camera_id}
+                  </Typography>
+
+                  <Box
+                    sx={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
+                    <Typography variant="caption" color="textSecondary">
+                      {format(new Date(alert.created_at), "MMM dd, HH:mm")}
+                    </Typography>
+                    <Chip
+                      label={alert.status}
+                      size="small"
+                      color={getStatusColor(alert.status) as any}
+                      variant="filled"
+                    />
+                  </Box>
+                </Paper>
+              ))}
+
+              {recentAlerts.length === 0 && (
+                <Box sx={{ textAlign: "center", py: 4 }}>
+                  <Security
+                    sx={{ fontSize: 48, color: "text.secondary", mb: 2 }}
+                  />
+                  <Typography color="textSecondary">
+                    No recent alerts
+                  </Typography>
+                </Box>
+              )}
+            </Stack>
+          </CardContent>
+        </Card>
+      </Box>
+
+      {/* Additional sections can be added here */}
     </Box>
   );
 };

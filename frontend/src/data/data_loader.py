@@ -179,7 +179,7 @@ class AugmentationFactory:
         severity: str = 'medium'
     ) -> A.Compose:
         """
-        Create training augmentation pipeline
+        Create enhanced training augmentation pipeline for extreme class imbalance
         
         Args:
             image_size: Target image size
@@ -197,62 +197,107 @@ class AugmentationFactory:
             transforms = [
                 A.Resize(image_size[1], image_size[0]),
                 A.HorizontalFlip(p=0.5),
-                A.ShiftScaleRotate(
-                    shift_limit=0.1,
-                    scale_limit=0.2,
-                    rotate_limit=15,
-                    p=0.5
-                ),
-                A.RandomBrightnessContrast(
-                    brightness_limit=0.2,
-                    contrast_limit=0.2,
-                    p=0.5
-                ),
-                A.HueSaturationValue(
-                    hue_shift_limit=10,
-                    sat_shift_limit=20,
-                    val_shift_limit=10,
-                    p=0.3
-                ),
-                A.GaussNoise(noise_scale_factor=0.1, p=0.2),
-                A.Blur(blur_limit=3, p=0.1),
-                A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-                ToTensorV2()
-            ]
-        else:  # heavy
-            transforms = [
-                A.Resize(image_size[1], image_size[0]),
-                A.HorizontalFlip(p=0.5),
+                A.VerticalFlip(p=0.2),
+                
+                # Spatial transforms
                 A.ShiftScaleRotate(
                     shift_limit=0.15,
-                    scale_limit=0.3,
+                    scale_limit=0.25,
                     rotate_limit=20,
-                    p=0.7
+                    p=0.6
                 ),
+                
+                # Color and lighting augmentations
                 A.RandomBrightnessContrast(
-                    brightness_limit=0.3,
-                    contrast_limit=0.3,
+                    brightness_limit=0.25,
+                    contrast_limit=0.25,
                     p=0.6
                 ),
                 A.HueSaturationValue(
                     hue_shift_limit=15,
-                    sat_shift_limit=30,
+                    sat_shift_limit=25,
                     val_shift_limit=15,
-                    p=0.5
+                    p=0.4
                 ),
+                A.RandomGamma(gamma_limit=(70, 130), p=0.3),
+                
+                # Simple noise and blur
                 A.OneOf([
-                    A.GaussNoise(var_limit=(10.0, 80.0)),
+                    A.GaussNoise(p=1.0),
                     A.GaussianBlur(blur_limit=3),
                     A.MotionBlur(blur_limit=3),
                 ], p=0.3),
-                A.CoarseDropout(
-                    max_holes=8,
-                    max_height=32,
-                    max_width=32,
-                    p=0.3
+                
+                A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+                ToTensorV2()
+            ]
+        else:  # heavy - for minority classes
+            transforms = [
+                A.Resize(image_size[1], image_size[0]),
+                A.HorizontalFlip(p=0.7),
+                A.VerticalFlip(p=0.3),
+                
+                # More aggressive spatial transforms for minority classes
+                A.Affine(
+                    translate_percent=(0.0, 0.2),
+                    scale=(0.7, 1.3),
+                    rotate=(-30, 30),
+                    shear=(-15, 15),
+                    p=0.8
                 ),
-                A.GridDistortion(p=0.2),
-                A.ElasticTransform(p=0.2),
+                
+                # Perspective and elastic transforms
+                A.Perspective(scale=(0.05, 0.15), p=0.3),
+                A.ElasticTransform(alpha=50, sigma=5, alpha_affine=5, p=0.2),
+                
+                # Enhanced color augmentation
+                A.RandomBrightnessContrast(
+                    brightness_limit=0.4,
+                    contrast_limit=0.4,
+                    p=0.7
+                ),
+                A.HueSaturationValue(
+                    hue_shift_limit=20,
+                    sat_shift_limit=40,
+                    val_shift_limit=20,
+                    p=0.6
+                ),
+                A.RandomGamma(gamma_limit=(60, 140), p=0.4),
+                A.CLAHE(clip_limit=4.0, tile_grid_size=(8, 8), p=0.3),
+                
+                # Heavy noise and distortion
+                A.OneOf([
+                    A.GaussNoise(var_limit=(0.02, 0.1)),  # Fixed parameter
+                    A.ISONoise(color_shift=(0.01, 0.1), intensity=(0.2, 0.8)),
+                    A.MultiplicativeNoise(multiplier=(0.8, 1.2)),
+                ], p=0.5),
+                
+                A.OneOf([
+                    A.GaussianBlur(blur_limit=5),
+                    A.MotionBlur(blur_limit=5),
+                    A.MedianBlur(blur_limit=5),
+                ], p=0.4),
+                
+                # Weather effects for robustness (simplified)
+                A.OneOf([
+                    A.RandomBrightnessContrast(brightness_limit=0.4, contrast_limit=0.4),
+                    A.HueSaturationValue(hue_shift_limit=25, sat_shift_limit=40, val_shift_limit=25),
+                    A.RandomGamma(gamma_limit=(60, 140)),
+                ], p=0.25),
+                
+                # Quality degradation
+                A.OneOf([
+                    A.ImageCompression(quality_lower=40, quality_upper=100),  # Fixed name
+                    A.Downscale(scale_min=0.7, scale_max=0.9),
+                ], p=0.3),
+                
+                # Advanced distortions
+                A.OneOf([
+                    A.GridDistortion(num_steps=5, distort_limit=0.2),
+                    A.OpticalDistortion(distort_limit=0.1, shift_limit=0.05),
+                    A.PiecewiseAffine(scale=(0.01, 0.05)),
+                ], p=0.2),
+                
                 A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
                 ToTensorV2()
             ]

@@ -48,10 +48,11 @@ model:
 
   # Anomaly Classification Model
   anomaly_classifier:
-    backbone: "efficientnet_b3" # efficientnet_b0-b7, resnet50, vision_transformer
+    backbone: "efficientnet_b3" # Use b3 for stable pretrained weights
     num_classes: 14
-    dropout: 0.3
+    dropout: 0.4 # Increased dropout for better generalization
     pretrained: true
+    use_enhanced_features: true # Enable enhanced feature extraction
 
   # Multi-Camera Fusion
   fusion:
@@ -62,39 +63,60 @@ model:
 
 # Training Configuration
 training:
-  epochs: 20
-  learning_rate: 0.001
+  epochs: 30 # Reduced from 75 for faster training (each epoch ~3-5 hours)
+  learning_rate: 0.0001 # Further reduced to prevent NaN loss
   optimizer: "adamw"
   scheduler: "cosine"
-  weight_decay: 0.01
+  weight_decay: 0.05 # Reduced to prevent over-regularization
+  use_mixup: true # Enable mixup augmentation
+  use_cutmix: true # Enable cutmix augmentation
+  warmup_epochs: 3 # Reduced warmup
+  ema_decay: 0.999 # Standard EMA for stability
+  progressive_resizing:
+    enabled: true
+    start_size: [128, 128]
+    mid_size: [192, 192]
+    milestones: [10, 20] # Adjusted for fewer epochs
+  logit_adjustment:
+    enabled: true # Enable for extreme imbalance
+    tau: 1.5 # Reduced tau to prevent instability
+  
+  # Early Stopping
+  early_stopping:
+    patience: 15 # Increased patience for longer training
+    min_delta: 0.001
+    monitor: "val_f1_macro"
 
-  # Loss Configuration
+  # Enhanced Loss Configuration for extreme imbalance
   loss:
-    type: "focal" # focal, cross_entropy, label_smoothing
+    type: "focal" # Use combined loss
     alpha: 0.25
-    gamma: 2.0
+    gamma: 2.5 # Increased gamma for harder focus on difficult examples
     label_smoothing: 0.1
 
-  # Data Augmentation
+  # Enhanced Data Augmentation for extreme imbalance
   augmentation:
     enabled: true
-    brightness: 0.2
-    contrast: 0.2
-    saturation: 0.2
-    hue: 0.1
-    rotation: 15
-    horizontal_flip: 0.5
-    mixup_alpha: 0.2
-    cutmix_alpha: 1.0
+    severity: "heavy" # Use heavy augmentation for minority classes
+    brightness: 0.3
+    contrast: 0.3
+    saturation: 0.3
+    hue: 0.15
+    rotation: 25
+    horizontal_flip: 0.7
+    mixup_alpha: 0.3
+    cutmix_alpha: 1.2
 
-  # Class Balance Handling
+  # Enhanced Class Balance Handling
   class_balance:
     method: "weighted_sampling" # weighted_sampling, focal_loss, oversampling
     auto_weights: true
+    oversample_minority: true # Add oversampling for minority classes
+    undersample_majority: false # Keep all normal data
 
   # Validation
   validation:
-    split: 0.2
+    split: 0.15 # Slightly reduced to have more training data
     stratify: true
     cross_validation_folds: 5
 
