@@ -31,7 +31,7 @@ class InceptionV3FeatureExtractor(nn.Module):
         # Load pre-trained InceptionV3
         self.inception = models.inception_v3(
             weights=Inception_V3_Weights.IMAGENET1K_V1 if pretrained else None,
-            aux_logits=False
+            aux_logits=True
         )
         
         # Remove the final classification layer
@@ -63,7 +63,10 @@ class InceptionV3FeatureExtractor(nn.Module):
             x = F.interpolate(x, size=(299, 299), mode='bilinear', align_corners=False)
         
         # Extract features using InceptionV3
+        # When training with aux_logits=True, inception returns (main_output, aux_output)
         features = self.inception(x)
+        if isinstance(features, tuple):
+            features = features[0]  # Use only the main output
         
         return features
 
@@ -234,19 +237,22 @@ class EnhancedTemporalAnomalyModel(nn.Module):
         lstm_hidden_dims: List[int] = [512, 256],
         dropout: float = 0.4,
         use_attention: bool = True,
-        freeze_cnn: bool = True
+        freeze_cnn: bool = True,
+        feature_based: bool = False  # NEW: Support for pre-extracted features
     ):
         super().__init__()
         
         self.num_classes = num_classes
         self.max_seq_length = max_seq_length
         self.feature_dim = feature_dim
+        self.feature_based = feature_based
         
-        # Feature extractor (CNN)
-        self.feature_extractor = InceptionV3FeatureExtractor(
-            pretrained=True,
-            freeze_backbone=freeze_cnn
-        )
+        # Feature extractor (CNN) - only needed if not using pre-extracted features
+        if not feature_based:
+            self.feature_extractor = InceptionV3FeatureExtractor(
+                pretrained=True,
+                freeze_backbone=freeze_cnn
+            )
         
         # Temporal classifier (LSTM + Attention)
         self.temporal_classifier = EnhancedLSTMClassifier(
@@ -274,6 +280,9 @@ class EnhancedTemporalAnomalyModel(nn.Module):
         Returns:
             Features: [B, T, feature_dim]
         """
+        if not hasattr(self, 'feature_extractor'):
+            raise RuntimeError("Feature extractor not available in feature-based mode")
+            
         B, T, C, H, W = video_batch.shape
         
         # Reshape to process all frames together
@@ -396,7 +405,8 @@ def create_enhanced_temporal_model(config: Dict) -> EnhancedTemporalAnomalyModel
         lstm_hidden_dims=model_config.get('lstm_hidden_dims', [512, 256]),
         dropout=model_config.get('dropout', 0.4),
         use_attention=model_config.get('use_attention', True),
-        freeze_cnn=model_config.get('freeze_cnn', True)
+        freeze_cnn=model_config.get('freeze_cnn', True),
+        feature_based=model_config.get('feature_based', False)  # Support for optimization
     )
     
     return model
